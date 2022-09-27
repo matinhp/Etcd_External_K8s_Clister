@@ -1,6 +1,6 @@
 OS: CentOS 7
 user: root
-pass: 123456
+pass: *
 
 
 hostname		IP				GW				DNS
