@@ -1,0 +1,168 @@
+################ On Master and Worker Nodes ####################
+
+cat <<EOF | sudo tee /etc/yum.repos.d/kubernetes.repo
+[kubernetes]
+name=Kubernetes
+baseurl=https://packages.cloud.google.com/yum/repos/kubernetes-el7-\$basearch
+enabled=1
+gpgcheck=1
+repo_gpgcheck=0
+gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
+EOF
+
+
+yum makecache -y
+
+yum list --showduplicates kubeadm --disableexcludes=kubernetes
+yum install kubeadm kubelet kubectl   -y
+
+
+vim /etc/hosts
+
+192.168.200.33  master1
+192.168.200.34  master2
+192.168.200.35  master3
+192.168.200.36  worker1
+192.168.200.37  worker2
+
+:wq
+
+
+################ On Etcd #################################
+# Copy etcd certificates to a Master nodes
+
+cd /etc/etcd/pki/
+scp ca.pem etcd.pem etcd-key.pem  root@192.168.200.33:~
+scp ca.pem etcd.pem etcd-key.pem  root@192.168.200.34:~
+scp ca.pem etcd.pem etcd-key.pem  root@192.168.200.35:~
+
+
+
+################ On Masters ################################
+# Copy etcd certificates to a standard location
+
+mkdir -p /etc/kubernetes/pki/etcd
+mv ca.pem etcd.pem etcd-key.pem /etc/kubernetes/pki/etcd/
+
+vim /etc/bashrc
+
+ETCD1_IP="192.168.200.30"
+ETCD2_IP="192.168.200.31"
+ETCD3_IP="192.168.200.32"
+
+:wq
+
+source /etc/bashrc
+
+
+
+
+# Create Cluster Configuration
+
+cat <<EOF > kubeadm-config.yaml
+apiVersion: kubeadm.k8s.io/v1beta3
+kind: ClusterConfiguration
+controlPlaneEndpoint: "192.168.200.33:6443"
+networking:
+        podsubnet: "192.168.0.0/16"
+etcd:
+    external:
+        endpoints:
+        - https://192.168.200.30:2379
+        - https://192.168.200.31:2379
+        - https://192.168.200.32:2379
+        caFile: /etc/kubernetes/pki/etcd/ca.pem
+        certFile: /etc/kubernetes/pki/etcd/etcd.pem
+        keyFile: /etc/kubernetes/pki/etcd/etcd-key.pem
+
+EOF
+
+
+################ On Master1 ##############################
+
+# Initialize Kubernetes Cluster
+kubeadm init --config kubeadm-config.yaml   --upload-certs
+
+
+systemctl enable kubelet
+
+mkdir ~/.kube
+cp /etc/kubernetes/admin.conf ~/.kube/config
+
+
+kubectl get nodes 
+
+# Deploy Calico network
+ 
+curl https://docs.projectcalico.org/manifests/calico.yaml -O
+kubectl apply -f calico.yaml
+
+kubectl get nodes
+
+
+# Bash-completion in kubectl 
+
+echo 'source <(kubectl completion bash)' >>~/.bashrc
+
+
+
+kubectl label node worker1 node-role.kubernetes.io/worker=worker
+kubectl label node worker2 node-role.kubernetes.io/worker=worker
+
+
+####################### Join Master nodes ###########################
+
+systemctl enable kubelet
+
+
+# Join master nodes:
+
+#kubeadm init phase upload-certs --upload-certs
+#kubeadm  token  create --print-join-command --certificate-key $KEY_FROM_PHASE_COMMAND
+
+
+  kubeadm join 192.168.200.33:6443 --token 9bz4x1.577d94d6plhqvgw2 \
+        --discovery-token-ca-cert-hash sha256:12a237fce05c58b269d45ce05aa6b61e130a708c4f3067d6e5a7ed91ebf2216b \
+        --control-plane --certificate-key 0e10dea9808b76476980a7b92c47bd9da78ad0dd622a03f6de1ead9bf77aa8c2
+
+
+####################### Join Worker nodes ###########################
+
+systemctl enable kubelet
+
+
+
+vim /etc/hosts
+
+192.168.200.33  master1
+192.168.200.34  master2
+192.168.200.35  master3
+192.168.200.36  worker1
+192.168.200.37  worker2
+
+:wq
+
+# Print Command to join worker nodes
+
+#kubeadm token create --print-join-command
+
+# kubeadm join 92.168.200.33:6443 --token <token> --discovery-token-ca-cert-hash <sha256:hash> 
+
+
+
+kubeadm join 192.168.200.33:6443 --token 9bz4x1.577d94d6plhqvgw2 \
+        --discovery-token-ca-cert-hash sha256:12a237fce05c58b269d45ce05aa6b61e130a708c4f3067d6e5a7ed91ebf2216b
+
+
+
+
+
+
+
+
+
+
+
+
+
+

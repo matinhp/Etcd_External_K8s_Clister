@@ -1,0 +1,37 @@
+yum update -y
+yum install telnet net-tools vim curl wget bash-completion chrony -y
+systemctl start chronyd
+systemctl enable chronyd
+
+systemctl stop firewalld
+systemctl disable firewalld
+
+
+vim /etc/selinux/config
+disabled
+:wq
+
+
+cat <<EOF | sudo tee /etc/sysctl.d/99-kubernetes-cri.conf
+net.bridge.bridge-nf-call-iptables  = 1
+net.ipv4.ip_forward                 = 1
+EOF
+
+
+modprobe br_netfilter
+modprobe overlay
+
+cat <<EOF | sudo tee /etc/modules-load.d/containerd.conf
+overlay
+br_netfilter
+EOF
+
+
+disable swap :
+
+vim /etc/fstab
+#COMMENT SWAP PARTION 
+:wq 
+
+
+reboot
